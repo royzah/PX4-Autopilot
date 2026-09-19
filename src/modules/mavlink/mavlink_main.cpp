@@ -923,7 +923,29 @@ void Mavlink::send_finish()
 
 		if (_src_addr_initialized) {
 # endif // CONFIG_NET
-			ret = sendto(_socket_fd, _buf, _buf_fill, 0, (struct sockaddr *)&_src_addr, sizeof(_src_addr));
+#if defined(CONFIG_LIB_ZTCS_SECURE_LINK)
+
+			if (_secure_link_ready) {
+				uint8_t sealed[SECURE_LINK_MTU];
+				lock_secure_link();
+				int sealed_len = secure_link_seal(&_secure_link, hrt_absolute_time(),
+								  _buf, _buf_fill, sealed, sizeof(sealed));
+				unlock_secure_link();
+
+				/* No session yet means drop, not retry: MAVLink is a stream of
+				 * state, so the next message carries the same information.
+				 */
+				ret = sealed_len > 0
+				      ? sendto(_socket_fd, sealed, sealed_len, 0,
+					       (struct sockaddr *)&_src_addr, sizeof(_src_addr))
+				      : _buf_fill;
+
+			} else
+#endif
+			{
+				ret = sendto(_socket_fd, _buf, _buf_fill, 0, (struct sockaddr *)&_src_addr, sizeof(_src_addr));
+			}
+
 # if defined(CONFIG_NET)
 		}
 
@@ -2254,6 +2276,9 @@ Mavlink::task_main(int argc, char *argv[])
 	}
 
 	pthread_mutex_init(&_tstatus_mutex, nullptr);
+#if defined(CONFIG_LIB_ZTCS_SECURE_LINK)
+	pthread_mutex_init(&_secure_link_mutex, nullptr);
+#endif
 	pthread_mutex_init(&_radio_status_mutex, nullptr);
 	pthread_mutex_init(&_message_buffer_mutex, nullptr);
 	pthread_mutex_init(&_mavlink_shell_mutex, nullptr);
@@ -2718,6 +2743,25 @@ Mavlink::task_main(int argc, char *argv[])
 		perf_begin(_loop_perf);
 
 		const hrt_abstime t = hrt_absolute_time();
+
+#if defined(CONFIG_LIB_ZTCS_SECURE_LINK)
+
+		/* Handshake retransmit and both rekey triggers come out of here, so
+		 * it runs whether or not there is traffic to carry.
+		 */
+		if (_secure_link_ready && get_protocol() == Protocol::UDP && _src_addr_initialized) {
+			uint8_t frame[SECURE_LINK_MTU];
+			lock_secure_link();
+			int frame_len = secure_link_poll(&_secure_link, t, frame, sizeof(frame));
+			unlock_secure_link();
+
+			if (frame_len > 0) {
+				sendto(_socket_fd, frame, frame_len, 0,
+				       (struct sockaddr *)&_src_addr, sizeof(_src_addr));
+			}
+		}
+
+#endif
 
 		update_rate_mult();
 

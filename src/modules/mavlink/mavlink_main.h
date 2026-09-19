@@ -107,6 +107,10 @@ enum class Protocol {
 
 using namespace time_literals;
 
+#if defined(CONFIG_LIB_ZTCS_SECURE_LINK)
+#include <lib/ztcs_secure_link/secure_link.h>
+#endif
+
 class Mavlink final : public ModuleParams
 {
 
@@ -674,6 +678,24 @@ private:
 	const char 		*_interface_name{nullptr};
 
 	int			_socket_fd{-1};
+#if defined(CONFIG_LIB_ZTCS_SECURE_LINK)
+	/* Sans-io, so the instance owns the state and this loop owns the
+	 * socket and the clock. See src/lib/ztcs_secure_link.
+	 */
+	struct secure_link	_secure_link {};
+	bool			_secure_link_ready{false};
+	/* Sealing runs on the sender and opening on the receiver, which is a
+	 * separate pthread. They share the nonce counter, and a torn increment
+	 * would repeat a nonce, which breaks ChaCha20-Poly1305 outright.
+	 */
+	pthread_mutex_t		_secure_link_mutex {};
+public:
+	struct secure_link	*get_secure_link() { return &_secure_link; }
+	bool			secure_link_ready() const { return _secure_link_ready; }
+	void			lock_secure_link() { pthread_mutex_lock(&_secure_link_mutex); }
+	void			unlock_secure_link() { pthread_mutex_unlock(&_secure_link_mutex); }
+private:
+#endif
 	Protocol		_protocol{Protocol::SERIAL};
 
 	radio_status_s		_rstatus {};
