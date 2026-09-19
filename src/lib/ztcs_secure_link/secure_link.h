@@ -113,10 +113,19 @@ int secure_link_open(struct secure_link *sl, uint64_t now_us,
                      const uint8_t *frame, size_t len,
                      uint8_t *out, size_t cap);
 
-/* Fills `keys` from the PX4 keystore. Defined in secure_link_keys.cpp and
- * built only for PX4; a non-PX4 target provisions its own way.
+/* Fills `keys` from the PX4 keystore, generating the static private key on
+ * first boot if it is absent. Defined in secure_link_keys.cpp; a non-PX4
+ * target provisions its own way.
+ *
+ * False when the aircraft is not usable yet, which on a first boot means it
+ * has a key but no enrolment. The caller keeps the link closed either way.
  */
-bool secure_link_load_keys(struct secure_link_keys *keys);
+bool secure_link_ensure_keys(struct secure_link_keys *keys);
+
+/* The public half of the static key, for enrolment to sign. The private
+ * half has no accessor: it is generated in the keystore and stays there.
+ */
+bool secure_link_public_key(uint8_t out[NOISE_DHLEN]);
 
 static inline bool secure_link_is_up(const struct secure_link *sl)
 {

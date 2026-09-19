@@ -56,7 +56,7 @@ AIR_PRIV=$(awk '/^static_private/{print $2}' <<<"$KEYS")
 IDENTITY=$(awk '/^identity_payload/{print $2}' <<<"$KEYS")
 mkdir -p "$WORK/attest"
 "$CLI" mint-attestation --seed "$WORK/operator.seed" --peer-id "$PEER" \
-  --device-serial px4-e2e --protocol-family control \
+  --device-serial px4-e2e --protocol-family mavlink \
   --out "$WORK/attest/$PEER.attest" >/dev/null 2>&1
 
 python3 - > "$WORK/gcs.log" 2>&1 <<'PY' &

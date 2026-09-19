@@ -2300,13 +2300,29 @@ Mavlink::task_main(int argc, char *argv[])
 	 */
 	struct secure_link_keys keys {};
 
-	if (secure_link_load_keys(&keys)) {
+	if (secure_link_ensure_keys(&keys)) {
 		secure_link_init(&_secure_link, &keys, hrt_absolute_time());
 		_secure_link_ready = true;
 		PX4_INFO("secure MAVLink link armed");
 
 	} else {
 		PX4_ERR("no link keys; UDP MAVLink stays closed");
+
+		/* The public half is how enrolment reaches this aircraft: it has
+		 * to be signed before the link can come up, and this is the only
+		 * way it leaves. Printed exactly when it is needed.
+		 */
+		uint8_t pub[NOISE_DHLEN];
+
+		if (secure_link_public_key(pub)) {
+			char hex[NOISE_DHLEN * 2 + 1];
+
+			for (unsigned i = 0; i < NOISE_DHLEN; i++) {
+				snprintf(&hex[i * 2], 3, "%02x", pub[i]);
+			}
+
+			PX4_INFO("enrol this static key: %s", hex);
+		}
 	}
 
 	memset(&keys, 0, sizeof(keys));
