@@ -3862,12 +3862,20 @@ MavlinkReceiver::run()
 
 #if defined(CONFIG_LIB_ZTCS_SECURE_LINK)
 
-				if (_mavlink.secure_link_ready() && nread > 0) {
+				if (nread > 0) {
+					/* Fail closed in this direction too: unkeyed means the
+					 * parser sees nothing, rather than accepting commands
+					 * from anyone who can reach the port.
+					 */
 					uint8_t plain[SECURE_LINK_MTU];
-					_mavlink.lock_secure_link();
-					int plain_len = secure_link_open(_mavlink.get_secure_link(), hrt_absolute_time(),
-									 buf, nread, plain, sizeof(plain));
-					_mavlink.unlock_secure_link();
+					int plain_len = -1;
+
+					if (_mavlink.secure_link_ready()) {
+						_mavlink.lock_secure_link();
+						plain_len = secure_link_open(_mavlink.get_secure_link(), hrt_absolute_time(),
+									     buf, nread, plain, sizeof(plain));
+						_mavlink.unlock_secure_link();
+					}
 
 					/* Zero means the datagram was a handshake and has been
 					 * consumed; negative means it was refused. Neither is

@@ -34,6 +34,7 @@
 
 px4_add_library(ztcs_secure_link
 	secure_link.c
+	secure_link_keys.cpp
 	noise/noise_ik.c
 	noise/chacha20_ietf.c
 	noise/backend_nuttx.c

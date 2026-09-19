@@ -103,6 +103,11 @@ int secure_link_open(struct secure_link *sl, uint64_t now_us,
                      const uint8_t *frame, size_t len,
                      uint8_t *out, size_t cap);
 
+/* Fills `keys` from the PX4 keystore. Defined in secure_link_keys.cpp and
+ * built only for PX4; a non-PX4 target provisions its own way.
+ */
+bool secure_link_load_keys(struct secure_link_keys *keys);
+
 static inline bool secure_link_is_up(const struct secure_link *sl)
 {
   return sl->state == SECURE_LINK_ESTABLISHED;
