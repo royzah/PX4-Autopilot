@@ -8,10 +8,17 @@
 
 #include "secure_link.h"
 
-#include <px4_platform_common/crypto_backend.h>
 #include <px4_platform_common/log.h>
 
 #include <string.h>
+
+/* The keystore and its backend headers exist only when the board opted into
+ * a crypto implementation. Without one there is nowhere to keep a private
+ * key, so the link stays closed rather than inventing a home for it.
+ */
+#if defined(PX4_CRYPTO)
+
+#include <px4_platform_common/crypto_backend.h>
 
 /* Keystore slots, provisioned off-board. The identity payload is minted by
  * signing the Noise static public key with the aircraft identity key, which
@@ -68,3 +75,14 @@ bool secure_link_load_keys(struct secure_link_keys *keys)
 
 	return true;
 }
+
+#else /* PX4_CRYPTO */
+
+bool secure_link_load_keys(struct secure_link_keys *keys)
+{
+	memset(keys, 0, sizeof(*keys));
+	PX4_ERR("no keystore on this board: enable the PX4 crypto backend");
+	return false;
+}
+
+#endif /* PX4_CRYPTO */

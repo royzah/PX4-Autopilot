@@ -41,6 +41,12 @@ px4_add_library(ztcs_secure_link
 )
 
 # The Noise core is portable C and the backend is the only part that knows
-# the platform. backend_nuttx.c needs CONFIG_CRYPTO in the NuttX defconfig;
-# a board without it supplies its own backend against noise/noise_backend.h.
+# the platform. backend_nuttx.c takes SHA-256, HMAC, Poly1305 and X25519 from
+# the OS, which needs CONFIG_CRYPTO and CONFIG_CRYPTO_RANDOM_POOL in the NuttX
+# configuration: the latter is what builds curve25519.c. A board without them
+# supplies its own backend against noise/noise_backend.h.
 target_include_directories(ztcs_secure_link PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+if("${PX4_PLATFORM}" MATCHES "nuttx")
+	target_link_libraries(ztcs_secure_link PRIVATE nuttx_crypto)
+endif()
