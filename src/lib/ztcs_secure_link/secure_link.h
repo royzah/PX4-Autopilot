@@ -35,13 +35,23 @@ extern "C" {
  * underneath to recover it, so this is ours to drive. Exponential with
  * jitter up to the cap, then a slow retry rather than spinning.
  */
+#ifndef SECURE_LINK_RETRY_MIN_US
 #define SECURE_LINK_RETRY_MIN_US     100000ULL   /* 100 ms */
+#endif
+#ifndef SECURE_LINK_RETRY_CAP_US
 #define SECURE_LINK_RETRY_CAP_US    2000000ULL   /* 2 s */
+#endif
+#ifndef SECURE_LINK_RETRY_SLOW_US
 #define SECURE_LINK_RETRY_SLOW_US   5000000ULL   /* 5 s once backed off */
+#endif
 
 /* Rekey triggers, which are separate causes and not one condition. */
+#ifndef SECURE_LINK_SILENCE_US
 #define SECURE_LINK_SILENCE_US     10000000ULL   /* nothing opened in 10 s */
+#endif
+#ifndef SECURE_LINK_DECRYPT_FAILS
 #define SECURE_LINK_DECRYPT_FAILS        16      /* peer restarted, likely */
+#endif
 
 enum secure_link_state {
   SECURE_LINK_DOWN = 0,   /* no keys */

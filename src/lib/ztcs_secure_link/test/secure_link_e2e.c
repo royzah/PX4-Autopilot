@@ -4,6 +4,12 @@
  * itself, not a reimplementation of it, so what ships is what was tested.
  *
  *   secure_link_e2e <host> <port> <s_priv> <station_pub> <identity> <msg>
+ *                   [rounds]
+ *
+ * With `rounds` above one it goes quiet between exchanges for longer than
+ * the silence timeout, which is how a radio dropout looks from here: the
+ * link must rekey itself and the ground station must follow without the old
+ * session getting in the way.
  ****************************************************************************/
 
 #include "../secure_link.h"
@@ -18,7 +24,7 @@
 #include <unistd.h>
 
 #define POLL_INTERVAL_US 20000ULL
-#define DEADLINE_US      8000000ULL
+#define DEADLINE_US      30000000ULL
 
 static uint64_t now_us(void)
 {
@@ -57,18 +63,24 @@ int main(int argc, char **argv)
   uint8_t buf[SECURE_LINK_MTU];
   uint8_t plain[SECURE_LINK_MTU];
   uint64_t start;
+  uint64_t quiet_until = 0;
+  unsigned handshakes_at_send = 0;
+  int round = 0;
+  int rounds;
   bool sent = false;
   int fd;
 
-  if (argc != 7
+  if (argc < 7 || argc > 8
       || unhex(argv[3], keys.static_private, NOISE_DHLEN)
       || unhex(argv[4], keys.station_public, NOISE_DHLEN)
       || unhex(argv[5], keys.identity, NOISE_IDENTITY_PAYLOAD_LEN))
     {
       fprintf(stderr, "usage: secure_link_e2e <host> <port> <s_priv> "
-                      "<station_pub> <identity> <msg>\n");
+                      "<station_pub> <identity> <msg> [rounds]\n");
       return 2;
     }
+
+  rounds = argc == 8 ? atoi(argv[7]) : 1;
 
   memset(&to, 0, sizeof(to));
   to.sin_family = AF_INET;
@@ -106,14 +118,17 @@ int main(int argc, char **argv)
           send(fd, buf, (size_t)n, 0);
         }
 
-      if (secure_link_is_up(&sl) && !sent)
+      if (secure_link_is_up(&sl) && !sent && t >= quiet_until)
         {
-          n = secure_link_seal(&sl, t, (const uint8_t *)argv[6],
-                               strlen(argv[6]), buf, sizeof(buf));
+          char payload[64];
+          snprintf(payload, sizeof(payload), "%s-%d", argv[6], round + 1);
+          n = secure_link_seal(&sl, t, (const uint8_t *)payload,
+                               strlen(payload), buf, sizeof(buf));
           if (n > 0)
             {
               send(fd, buf, (size_t)n, 0);
-              printf("uplink %s\n", argv[6]);
+              printf("uplink %s\n", payload);
+              handshakes_at_send = sl.handshakes;
               sent = true;
             }
         }
@@ -129,13 +144,30 @@ int main(int argc, char **argv)
       if (n > 0)
         {
           printf("downlink %.*s\n", n, (const char *)plain);
-          close(fd);
-          return 0;
+
+          if (++round >= rounds)
+            {
+              close(fd);
+              return 0;
+            }
+
+          /* Go quiet for longer than the silence timeout. Nothing opens in
+           * that window, which is exactly what a dropout looks like.
+           */
+          sent = false;
+          quiet_until = now_us() + SECURE_LINK_SILENCE_US * 2;
+          printf("quiet for %llu us\n",
+                 (unsigned long long)(SECURE_LINK_SILENCE_US * 2));
         }
 
       if (n == 0 && secure_link_is_up(&sl))
         {
-          printf("keyed\n");
+          printf("keyed after %u handshake(s)\n", sl.handshakes);
+
+          if (round > 0 && sl.handshakes > handshakes_at_send)
+            {
+              printf("rekeyed after the dropout\n");
+            }
         }
     }
 

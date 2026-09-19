@@ -32,8 +32,13 @@ await() {
 
 [ -d "$ZTCS" ] || { echo "set ZTCS_DIR to a ZTCS checkout" >&2; exit 1; }
 
+# The silence timeout is compressed so the dropout phase takes seconds
+# rather than half a minute. The mechanism is what is under test; the unit
+# tests pin the boundary value itself.
+SILENCE_US=1500000
 read -r -a SODIUM <<< "$(pkg-config --cflags --libs libsodium)"
-gcc -O2 -Wall -Wextra -std=gnu99 -I"$SL" -o "$WORK/aircraft" \
+gcc -O2 -Wall -Wextra -std=gnu99 -I"$SL" \
+  -DSECURE_LINK_SILENCE_US=${SILENCE_US}ULL -o "$WORK/aircraft" \
   "$SL/secure_link.c" "$SL/noise/noise_ik.c" "$SL/noise/chacha20_ietf.c" \
   "$ZTCS/crates/ztcs-noise-udp/c/backend_sodium.c" \
   "$SL/test/secure_link_e2e.c" "${SODIUM[@]}"
@@ -59,10 +64,13 @@ import socket
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.bind(("127.0.0.1", 0))
 print("port", s.getsockname()[1], flush=True)
-s.settimeout(30)
-data, addr = s.recvfrom(2048)
-print("uplink", data.decode(), flush=True)
-s.sendto(b"COMMAND_ACK", addr)
+s.settimeout(60)
+for i in (1, 2):
+    data, addr = s.recvfrom(2048)
+    # The source port is this aircraft's bridge. It must not move across a
+    # rekey, or the GCS sees a second vehicle.
+    print("uplink", data.decode(), "from", addr[1], flush=True)
+    s.sendto(b"COMMAND_ACK", addr)
 PY
 GCS_PID=$!
 await "$WORK/gcs.log" '^port [0-9]+'
@@ -72,17 +80,31 @@ STATION=$("$GW" --static-key "$WORK/station.key" --operator-key "$WORK/operator.
   --attest-dir "$WORK/attest" --print-public-key 2>/dev/null)
 "$GW" --listen 127.0.0.1:0 --gcs "127.0.0.1:$GCS_PORT" \
   --static-key "$WORK/station.key" --operator-key "$WORK/operator.pub" \
+  --idle-timeout-secs 60 \
   --attest-dir "$WORK/attest" > "$WORK/gw.log" 2>&1 &
 GW_PID=$!
 await "$WORK/gw.log" 'secure MAVLink gateway up'
 GW_PORT=$(grep -oE 'listen=127\.0\.0\.1:[0-9]+' "$WORK/gw.log" | head -1 | cut -d: -f2)
 
+# Two rounds, with a dropout between them. The station's idle timeout is set
+# above the aircraft's silence timeout on purpose: reap first and the bridge
+# is released mid-dropout, so the reconnect looks like a new vehicle. That
+# ordering is the contract between the two ends.
 "$WORK/aircraft" 127.0.0.1 "$GW_PORT" "$AIR_PRIV" "$STATION" "$IDENTITY" \
-  "HEARTBEAT" | tee "$WORK/air.log"
+  "HEARTBEAT" 2 | tee "$WORK/air.log"
 
-grep -q '^uplink HEARTBEAT$' "$WORK/gcs.log" \
-  || { echo "the GCS never received the payload" >&2; exit 1; }
-grep -q '^downlink COMMAND_ACK$' "$WORK/air.log" \
-  || { echo "the aircraft never received the reply" >&2; exit 1; }
+for round in 1 2; do
+  grep -q "^uplink HEARTBEAT-$round " "$WORK/gcs.log" \
+    || { echo "round $round never reached the GCS" >&2; exit 1; }
+done
+[ "$(grep -c '^downlink COMMAND_ACK$' "$WORK/air.log")" -eq 2 ] \
+  || { echo "the aircraft did not hear both replies" >&2; exit 1; }
 
-echo "e2e ok: PX4 state machine -> gateway -> GCS, both ways"
+grep -q '^rekeyed after the dropout$' "$WORK/air.log" \
+  || { echo "the aircraft did not rekey across the dropout" >&2; exit 1; }
+
+PORTS=$(awk '/^uplink/{print $4}' "$WORK/gcs.log" | sort -u | wc -l)
+[ "$PORTS" -eq 1 ] \
+  || { echo "the bridge port moved across the rekey ($PORTS seen)" >&2; exit 1; }
+
+echo "e2e ok: two rounds across a dropout, rekeyed, one bridge port"
