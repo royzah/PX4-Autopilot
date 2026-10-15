@@ -34,7 +34,9 @@
 #include <px4_platform_common/tasks.h>
 #include <drivers/drv_hrt.h>
 
+#ifdef __PX4_NUTTX
 #include <nuttx/config.h>
+#endif
 
 #include <cstdlib>
 #include <cstring>
@@ -47,7 +49,9 @@
 #include <parameters/param.h>
 #include <version/version.h>
 
+#ifdef __PX4_NUTTX
 #include <arch/chip/chip.h>
+#endif
 
 #include "uavcan_main.hpp"
 #include "uavcan_servers.hpp"

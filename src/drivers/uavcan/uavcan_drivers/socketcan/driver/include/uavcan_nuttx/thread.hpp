@@ -36,8 +36,12 @@
 #pragma once
 
 
+#ifdef __PX4_NUTTX
 #include <nuttx/config.h>
 #include <nuttx/fs/fs.h>
+#endif
+#include <pthread.h>
+#include <semaphore.h>
 #include <poll.h>
 #include <errno.h>
 #include <cstdio>

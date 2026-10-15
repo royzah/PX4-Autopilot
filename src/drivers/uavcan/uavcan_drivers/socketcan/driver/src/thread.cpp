@@ -42,7 +42,9 @@ namespace uavcan_socketcan
 BusEvent::BusEvent(CanDriver &can_driver)
 {
 	sem_init(&sem_, 0, 0);
+#ifdef __PX4_NUTTX
 	sem_setprotocol(&sem_, SEM_PRIO_NONE);
+#endif
 }
 
 BusEvent::~BusEvent()

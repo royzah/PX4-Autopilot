@@ -37,6 +37,7 @@
 
 #pragma once
 
+#include <pthread.h>
 #include <systemlib/err.h>
 #include <uavcan/uavcan.hpp>
 #include <uavcan/helpers/heap_based_pool_allocator.hpp>
@@ -45,10 +46,23 @@
 namespace uavcan_node
 {
 
+#if defined(__PX4_NUTTX)
 struct AllocatorSynchronizer {
 	const ::irqstate_t state = ::enter_critical_section();
 	~AllocatorSynchronizer() { ::leave_critical_section(state); }
 };
+#else
+struct AllocatorSynchronizer {
+	AllocatorSynchronizer() { pthread_mutex_lock(&mutex()); }
+	~AllocatorSynchronizer() { pthread_mutex_unlock(&mutex()); }
+
+	static pthread_mutex_t &mutex()
+	{
+		static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+		return m;
+	}
+};
+#endif
 
 struct Allocator : public uavcan::HeapBasedPoolAllocator<uavcan::MemPoolBlockSize, AllocatorSynchronizer> {
 	static constexpr unsigned CapacitySoftLimit = 250;

@@ -1,7 +1,7 @@
 menuconfig DRIVERS_UAVCAN
 	bool "uavcan"
 	default n
-    depends on PLATFORM_NUTTX
+    depends on PLATFORM_NUTTX || BOARD_LINUX_TARGET
 	---help---
 		Enable support for uavcan
 

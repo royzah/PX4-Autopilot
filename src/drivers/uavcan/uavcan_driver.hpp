@@ -36,7 +36,7 @@
  */
 
 #pragma once
-#if defined(UAVCAN_SOCKETCAN_NUTTX)
+#if defined(UAVCAN_SOCKETCAN_NUTTX) || defined(UAVCAN_SOCKETCAN_POSIX)
 #  include <uavcan_nuttx/uavcan_nuttx.hpp>
 #elif defined(UAVCAN_KINETIS_NUTTX)
 #  include <uavcan_kinetis/uavcan_kinetis.hpp>

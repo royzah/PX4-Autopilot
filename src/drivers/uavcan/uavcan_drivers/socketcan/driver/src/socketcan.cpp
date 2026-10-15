@@ -50,7 +50,12 @@
 #include <string.h>
 #include <errno.h>
 
+#ifdef __PX4_NUTTX
 #include <nuttx/can.h>
+#else
+#include <linux/can.h>
+#include <linux/can/raw.h>
+#endif
 
 #define MODULE_NAME "UAVCAN_SOCKETCAN"
 
@@ -67,6 +72,18 @@ struct BitTimingSettings {
 
 	bool isValid() const { return canbtr != 0; }
 };
+
+bool wouldBlock(int err)
+{
+#if EWOULDBLOCK != EAGAIN
+
+	if (err == EWOULDBLOCK) {
+		return true;
+	}
+
+#endif
+	return err == EAGAIN;
+}
 
 } // namespace
 
@@ -88,7 +105,7 @@ uavcan::uint32_t CanIface::socketInit(uint32_t index)
 		return -1;
 	}
 
-	snprintf(ifr.ifr_name, IFNAMSIZ, "can%li", index);
+	snprintf(ifr.ifr_name, IFNAMSIZ, "can%" PRIu32, index);
 	ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 	ifr.ifr_ifindex = if_nametoindex(ifr.ifr_name);
 
@@ -109,6 +126,7 @@ uavcan::uint32_t CanIface::socketInit(uint32_t index)
 		return -1;
 	}
 
+#ifdef CAN_RAW_TX_DEADLINE
 	/* NuttX Feature: Enable TX deadline when sending CAN frames
 	 * When a deadline occurs the driver will remove the CAN frame
 	 */
@@ -117,6 +135,8 @@ uavcan::uint32_t CanIface::socketInit(uint32_t index)
 		PX4_ERR("CAN_RAW_TX_DEADLINE is disabled");
 		return -1;
 	}
+
+#endif
 
 	if (can_fd) {
 		if (setsockopt(_fd, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &on, sizeof(on)) < 0) {
@@ -144,6 +164,8 @@ uavcan::uint32_t CanIface::socketInit(uint32_t index)
 
 	_send_msg.msg_iov    = &_send_iov;
 	_send_msg.msg_iovlen = 1;
+
+#ifdef CAN_RAW_TX_DEADLINE
 	_send_msg.msg_control = &_send_control;
 	_send_msg.msg_controllen = sizeof(_send_control);
 
@@ -152,6 +174,7 @@ uavcan::uint32_t CanIface::socketInit(uint32_t index)
 	_send_cmsg->cmsg_type = CAN_RAW_TX_DEADLINE;
 	_send_cmsg->cmsg_len = sizeof(struct timeval);
 	_send_tv = (struct timeval *)CMSG_DATA(_send_cmsg);
+#endif
 
 	// Setup RX msg
 	_recv_iov.iov_base = &_recv_frame;
@@ -192,9 +215,11 @@ uavcan::int16_t CanIface::send(const uavcan::CanFrame &frame, uavcan::MonotonicT
 		memcpy(&net_frame->data, frame.data, frame.dlc);
 	}
 
+#ifdef CAN_RAW_TX_DEADLINE
 	/* Set CAN_RAW_TX_DEADLINE timestamp  */
 	_send_tv->tv_usec = tx_deadline.toUSec() % 1000000ULL;
 	_send_tv->tv_sec = (tx_deadline.toUSec() - _send_tv->tv_usec) / 1000000ULL;
+#endif
 
 	res = sendmsg(_fd, &_send_msg, MSG_DONTWAIT);
 
@@ -212,7 +237,7 @@ uavcan::int16_t CanIface::send(const uavcan::CanFrame &frame, uavcan::MonotonicT
 	 * transfer in progress. A non-blocking send that the driver could not take
 	 * immediately comes back as ETIMEDOUT from net_timedwait(), not ENOBUFS.
 	 */
-	if (errno == ETIMEDOUT || errno == EAGAIN || errno == EWOULDBLOCK ||
+	if (errno == ETIMEDOUT || wouldBlock(errno) ||
 	    errno == ENOBUFS || errno == EINTR || errno == EBUSY) {
 		return 0;
 	}
@@ -259,7 +284,7 @@ uavcan::int16_t CanIface::receive(uavcan::CanFrame &out_frame, uavcan::Monotonic
 		/* Nothing to read is not a driver failure; uc_can_io maps any negative
 		 * return onto -ErrDriver.
 		 */
-		if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ETIMEDOUT) {
+		if (wouldBlock(errno) || errno == ETIMEDOUT) {
 			return 0;
 		}
 
@@ -367,6 +392,9 @@ int CanIface::setBitRate(uint32_t bitrate)
 		return -1;
 	}
 
+#ifndef SIOCGCANBITRATE
+	return 0;
+#else
 	struct ifreq ifr {};
 
 	snprintf(ifr.ifr_name, IFNAMSIZ, "can%" PRIu32, _index);
@@ -443,6 +471,7 @@ int CanIface::setBitRate(uint32_t bitrate)
 	}
 
 	return 0;
+#endif
 #endif
 }
 

@@ -54,7 +54,9 @@
 #include <parameters/param.h>
 #include <version/version.h>
 
+#ifdef __PX4_NUTTX
 #include <arch/chip/chip.h>
+#endif
 
 #include <uORB/topics/esc_status.h>
 
@@ -1279,7 +1281,7 @@ UavcanNode::print_info()
 
 	printf("\n");
 
-#if !defined(UAVCAN_SOCKETCAN_NUTTX)
+#if !defined(UAVCAN_SOCKETCAN_NUTTX) && !defined(UAVCAN_SOCKETCAN_POSIX)
 	// See https://github.com/PX4/PX4-Autopilot/issues/22871
 	printf("WARNING: CAN error counter values below may increase during this function call due to internal counter reading implementation.\n");
 	printf("Do not fully trust these counters until this issue is fixed.\n");
@@ -1302,7 +1304,7 @@ UavcanNode::print_info()
 		auto iface = _node.getDispatcher().getCanIOManager().getCanDriver().getIface(i);
 
 		if (iface) {
-#if defined(UAVCAN_SOCKETCAN_NUTTX)
+#if defined(UAVCAN_SOCKETCAN_NUTTX) || defined(UAVCAN_SOCKETCAN_POSIX)
 			UAVCAN_DRIVER::CanIface::BusErrors bus;
 
 			if (static_cast<UAVCAN_DRIVER::CanIface *>(iface)->lastErrors(bus)) {

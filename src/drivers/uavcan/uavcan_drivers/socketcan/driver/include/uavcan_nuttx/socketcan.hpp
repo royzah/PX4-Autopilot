@@ -41,7 +41,12 @@
 #include <sys/time.h>
 #include <sys/socket.h>
 
+#ifdef __PX4_NUTTX
 #include <nuttx/can.h>
+#else
+#include <linux/can.h>
+#include <linux/can/raw.h>
+#endif
 
 namespace uavcan_socketcan
 {
