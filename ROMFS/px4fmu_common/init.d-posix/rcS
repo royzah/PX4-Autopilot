@@ -332,6 +332,11 @@ then
 	zenoh start
 fi
 
+if param greater -s UAVCAN_ENABLE 0
+then
+	uavcan start
+fi
+
 if param greater -s MNT_MODE_IN -1
 then
 	gimbal start
