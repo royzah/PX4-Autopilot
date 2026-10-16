@@ -116,6 +116,14 @@ void MulticopterLandDetector::_update_topics()
 		_takeoff_state = takeoff_status.takeoff_state;
 	}
 
+	if (_armed && _was_locked_down && !_lockdown && _takeoff_state == takeoff_status_s::TAKEOFF_STATE_FLIGHT) {
+		_ground_contact_hysteresis = systemlib::Hysteresis{false};
+		_maybe_landed_hysteresis = systemlib::Hysteresis{false};
+		_landed_hysteresis = systemlib::Hysteresis{false};
+	}
+
+	_was_locked_down = _lockdown;
+
 	// Update distance sensor observability
 	if (!_dist_bottom_is_observable) {
 		// we consider the distance to the ground observable if the system is using a range sensor

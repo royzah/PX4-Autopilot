@@ -108,6 +108,7 @@ private:
 	bool _vehicle_thrust_setpoint_valid{false};
 
 	uint8_t _takeoff_state{takeoff_status_s::TAKEOFF_STATE_DISARMED};
+	bool _was_locked_down{false};
 
 	systemlib::Hysteresis _minimum_thrust_8s_hysteresis{false};
 

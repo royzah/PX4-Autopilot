@@ -97,6 +97,7 @@ void LandDetector::Run()
 
 	if (_actuator_armed_sub.update(&actuator_armed)) {
 		_armed = actuator_armed.armed;
+		_lockdown = actuator_armed.lockdown;
 	}
 
 	vehicle_acceleration_s vehicle_acceleration;

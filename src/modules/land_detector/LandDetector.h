@@ -149,6 +149,7 @@ protected:
 	matrix::Vector3f _angular_velocity{};
 
 	bool _armed{false};
+	bool _lockdown{false};
 	bool _previous_armed_state{false};	///< stores the previous actuator_armed.armed state
 
 	vehicle_land_detected_s _land_detected{};
